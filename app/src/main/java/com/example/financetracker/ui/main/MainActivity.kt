@@ -87,13 +87,13 @@ class MainActivity : ComponentActivity() {
                                 repository.insertCategory(
                                     com.example.financetracker.data.model.Category(
                                         name = "Food",
-                                        icon = "🍔"
+                                        icon = "📁"
                                     )
                                 )
                                 repository.insertCategory(
                                     com.example.financetracker.data.model.Category(
                                         name = "Salary",
-                                        icon = "💰"
+                                        icon = "📁"
                                     )
                                 )
                             }
