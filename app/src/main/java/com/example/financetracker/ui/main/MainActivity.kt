@@ -9,6 +9,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -17,6 +18,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -25,6 +27,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -46,6 +49,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
+
         setContent {
             FinanceTrackerTheme {
                 val context = LocalContext.current
@@ -57,9 +61,9 @@ class MainActivity : ComponentActivity() {
 
                 var balance by remember { mutableDoubleStateOf(0.0) }
                 var transactions by remember { mutableStateOf(emptyList<Transaction>()) }
-                var snackbarHostState = remember { SnackbarHostState() }
+                var selectedFilter by remember { mutableStateOf("All") }
+                val snackbarHostState = remember { SnackbarHostState() }
 
-                // Collect data in real-time
                 LaunchedEffect(Unit) {
                     launch {
                         repository.getBalance().collect { newBalance ->
@@ -71,15 +75,47 @@ class MainActivity : ComponentActivity() {
                             transactions = list
                         }
                     }
+                    launch {
+                        repository.getAllCategories().collect { existingCategories ->
+                            if (existingCategories.isEmpty()) {
+                                repository.insertCategory(
+                                    com.example.financetracker.data.model.Category(
+                                        name = "Uncategorized",
+                                        icon = "📁"
+                                    )
+                                )
+                                repository.insertCategory(
+                                    com.example.financetracker.data.model.Category(
+                                        name = "Food",
+                                        icon = "🍔"
+                                    )
+                                )
+                                repository.insertCategory(
+                                    com.example.financetracker.data.model.Category(
+                                        name = "Salary",
+                                        icon = "💰"
+                                    )
+                                )
+                            }
+                        }
+                    }
                 }
 
                 Scaffold(
                     modifier = Modifier.fillMaxSize(),
+                    containerColor = MaterialTheme.colorScheme.background,
                     snackbarHost = { SnackbarHost(snackbarHostState) },
                     floatingActionButton = {
                         FloatingActionButton(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary,
                             onClick = {
-                                startActivity(Intent(this@MainActivity, AddTransactionActivity::class.java))
+                                startActivity(
+                                    Intent(
+                                        this@MainActivity,
+                                        AddTransactionActivity::class.java
+                                    )
+                                )
                             }
                         ) {
                             Icon(Icons.Default.Add, contentDescription = "Add transaction")
@@ -87,10 +123,21 @@ class MainActivity : ComponentActivity() {
                     },
                     topBar = {
                         CenterAlignedTopAppBar(
-                            title = { Text("Finance Tracker") },
+                            title = { Text("Finance Tracker", fontWeight = FontWeight.Bold) },
+                            actions = {
+                                IconButton(onClick = {
+                                    val intent =
+                                        Intent(this@MainActivity, CategoryActivity::class.java)
+                                    startActivity(intent)
+                                }) {
+                                    Icon(
+                                        imageVector = Icons.Default.Settings,
+                                        contentDescription = "Manage Categories"
+                                    )
+                                }
+                            },
                             colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                                containerColor = MaterialTheme.colorScheme.primaryContainer,
-                                titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                containerColor = MaterialTheme.colorScheme.background
                             )
                         )
                     }
@@ -99,12 +146,43 @@ class MainActivity : ComponentActivity() {
                         modifier = Modifier
                             .fillMaxSize()
                             .padding(innerPadding)
-                            .padding(16.dp)
+                            .padding(horizontal = 16.dp)
                     ) {
                         BalanceCard(balance = balance)
                         Spacer(Modifier.height(24.dp))
+
+                        Text(
+                            "Filter by Type",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            val filterOptions = listOf("All", "income", "expense")
+                            filterOptions.forEach { option ->
+                                FilterChip(
+                                    selected = selectedFilter == option,
+                                    onClick = { selectedFilter = option },
+                                    label = { Text(option.replaceFirstChar { it.uppercase() }) },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = MaterialTheme.colorScheme.primary,
+                                        selectedLabelColor = Color.Black
+                                    )
+                                )
+                            }
+                        }
+
+                        val filteredTransactions = remember(transactions, selectedFilter) {
+                            if (selectedFilter == "All") transactions
+                            else transactions.filter { it.type == selectedFilter }
+                        }
+
                         TransactionList(
-                            transactions = transactions,
+                            transactions = filteredTransactions,
                             onDelete = { transaction ->
                                 scope.launch {
                                     repository.delete(transaction)
@@ -127,9 +205,9 @@ private fun BalanceCard(balance: Double) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(
             modifier = Modifier
@@ -138,16 +216,16 @@ private fun BalanceCard(balance: Double) {
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                "Current Balance",
-                fontSize = 18.sp,
-                color = MaterialTheme.colorScheme.onPrimaryContainer
+                "Total Balance",
+                fontSize = 16.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Spacer(Modifier.height(8.dp))
             Text(
                 text = String.format("%.2f €", balance),
-                fontSize = 40.sp,
-                style = MaterialTheme.typography.headlineLarge,
-                color = MaterialTheme.colorScheme.onPrimaryContainer
+                fontSize = 42.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
             )
         }
     }
@@ -160,24 +238,28 @@ private fun TransactionList(
 ) {
     if (transactions.isEmpty()) {
         Box(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 40.dp),
             contentAlignment = Alignment.Center
         ) {
             Text(
                 "No transactions yet.\nTap + to add one!",
                 textAlign = TextAlign.Center,
                 style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
             )
         }
     } else {
         Text(
             "Recent Transactions",
             style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier.padding(bottom = 8.dp)
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(bottom = 12.dp, start = 4.dp)
         )
         LazyColumn(
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(bottom = 80.dp)
         ) {
             items(
                 items = transactions,
@@ -208,7 +290,10 @@ fun TransactionCard(
     ) {
         Card(
             modifier = Modifier.fillMaxWidth(),
-            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface
+            ),
+            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
         ) {
             Row(
                 modifier = Modifier
@@ -216,38 +301,44 @@ fun TransactionCard(
                     .padding(16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Receipt image thumbnail
                 if (transaction.imagePath != null) {
                     Image(
                         painter = rememberAsyncImagePainter(transaction.imagePath),
                         contentDescription = "Receipt thumbnail",
                         modifier = Modifier
-                            .size(60.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable { showImageDialog = true },
+                            .size(50.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable { showImageDialog = true }
+                            .background(Color.Gray),
                         contentScale = ContentScale.Crop
                     )
                     Spacer(Modifier.width(16.dp))
                 }
 
-                // Transaction details
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = transaction.description,
-                        style = MaterialTheme.typography.titleMedium,
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
+                    Text(
+                        text = transaction.categoryName,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold
+                    )
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        text = SimpleDateFormat("dd MMM yyyy, HH:mm", Locale.getDefault())
+                        text = SimpleDateFormat("dd MMM, HH:mm", Locale.getDefault())
                             .format(transaction.timestamp),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
 
-                // Amount
                 Text(
                     text = if (transaction.type == "income")
                         "+${String.format("%.2f", transaction.amount)} €"
@@ -257,26 +348,25 @@ fun TransactionCard(
                         MaterialTheme.colorScheme.primary
                     else
                         MaterialTheme.colorScheme.tertiary,
-                    style = MaterialTheme.typography.titleMedium
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.bodyLarge
                 )
 
-                Spacer(Modifier.width(8.dp))
+                Spacer(Modifier.width(4.dp))
 
-                // Delete button
                 IconButton(
                     onClick = { showDeleteDialog = true }
                 ) {
                     Icon(
                         imageVector = Icons.Default.Delete,
-                        contentDescription = "Delete transaction",
-                        tint = MaterialTheme.colorScheme.error
+                        contentDescription = "Delete",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                     )
                 }
             }
         }
     }
 
-    // Full image dialog
     if (showImageDialog && transaction.imagePath != null) {
         FullImageDialog(
             imagePath = transaction.imagePath,
@@ -284,7 +374,6 @@ fun TransactionCard(
         )
     }
 
-    // Delete confirmation dialog
     if (showDeleteDialog) {
         DeleteConfirmationDialog(
             transactionDescription = transaction.description,
@@ -304,20 +393,21 @@ private fun FullImageDialog(
     onDismiss: () -> Unit
 ) {
     AlertDialog(
+        containerColor = MaterialTheme.colorScheme.surface,
         onDismissRequest = onDismiss,
         confirmButton = {
             TextButton(onClick = onDismiss) {
-                Text("Close")
+                Text("Close", color = MaterialTheme.colorScheme.primary)
             }
         },
         text = {
             Image(
                 painter = rememberAsyncImagePainter(imagePath),
-                contentDescription = "Full receipt image",
+                contentDescription = "Full receipt",
                 modifier = Modifier
                     .fillMaxWidth()
                     .heightIn(max = 500.dp)
-                    .clip(RoundedCornerShape(8.dp)),
+                    .clip(RoundedCornerShape(12.dp)),
                 contentScale = ContentScale.Fit
             )
         }
@@ -331,23 +421,28 @@ private fun DeleteConfirmationDialog(
     onDismiss: () -> Unit
 ) {
     AlertDialog(
+        containerColor = MaterialTheme.colorScheme.surface,
         onDismissRequest = onDismiss,
         icon = {
             Icon(
                 imageVector = Icons.Default.Delete,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.error
+                tint = MaterialTheme.colorScheme.tertiary
             )
         },
-        title = { Text("Delete Transaction?") },
+        title = { Text("Delete Transaction?", color = MaterialTheme.colorScheme.onSurface) },
         text = {
-            Text("Are you sure you want to delete \"$transactionDescription\"? This action cannot be undone.")
+            Text(
+                "Are you sure you want to delete \"$transactionDescription\"? This cannot be undone.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         },
         confirmButton = {
             Button(
                 onClick = onConfirm,
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.error
+                    containerColor = MaterialTheme.colorScheme.tertiary,
+                    contentColor = MaterialTheme.colorScheme.onTertiary
                 )
             ) {
                 Text("Delete")
@@ -355,7 +450,7 @@ private fun DeleteConfirmationDialog(
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancel")
+                Text("Cancel", color = MaterialTheme.colorScheme.onSurface)
             }
         }
     )

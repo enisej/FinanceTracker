@@ -11,8 +11,9 @@ data class Transaction(
     @PrimaryKey(autoGenerate = true)
     val id: Int = 0,
     val amount: Double,
-    val type: String, // "income" or "expense"
+    val type: String,
     val description: String,
+    val categoryName: String = "Uncategorized",
     val imagePath: String? = null,
     val timestamp: Long = System.currentTimeMillis()
 ) : Parcelable

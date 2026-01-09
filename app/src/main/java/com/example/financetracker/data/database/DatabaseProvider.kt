@@ -4,17 +4,19 @@ import android.content.Context
 import androidx.room.Room
 
 object DatabaseProvider {
-    @Volatile
-    private var instance: AppDatabase? = null
+    private var INSTANCE: AppDatabase? = null
 
     fun getDatabase(context: Context): AppDatabase {
-        return instance ?: synchronized(this) {
-            val appContext = context.applicationContext
-            instance ?: Room.databaseBuilder(
-                appContext,
+        return INSTANCE ?: synchronized(this) {
+            val instance = Room.databaseBuilder(
+                context.applicationContext,
                 AppDatabase::class.java,
-                "finance_db"
-            ).build().also { instance = it }
+                "finance_database"
+            )
+                .fallbackToDestructiveMigration()
+                .build()
+            INSTANCE = instance
+            instance
         }
     }
 }
